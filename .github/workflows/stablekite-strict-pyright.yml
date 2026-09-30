@@ -1,0 +1,64 @@
+name: StableKite strict Pyright
+
+on:
+  push:
+    branches:
+      - stablekite/typing-pyright-ci
+  workflow_dispatch:
+
+jobs:
+  strict-pyright:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build and install typed wheel
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip build
+          python -m pip install "numpy" "panda3d==1.10.16" "types-panda3d"
+          python -m build --wheel
+          python -m venv .venv
+          $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install "numpy" "panda3d==1.10.16" "types-panda3d"
+          .\.venv\Scripts\python.exe -m pip install --no-deps $wheel
+          Push-Location $env:RUNNER_TEMP
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -c "import panda3d_viewer, pathlib; print(panda3d_viewer.__file__); assert pathlib.Path(panda3d_viewer.__file__).with_name('py.typed').is_file()"
+          Pop-Location
+      - name: Strict installed consumer
+        shell: pwsh
+        run: |
+          @'
+          from typing import assert_type
+          import numpy as np
+          from numpy.typing import NDArray
+          from panda3d.core import Geom
+          from panda3d_viewer import Viewer, ViewerConfig
+          from panda3d_viewer.geometry import make_axes, make_points
+
+          cfg = ViewerConfig(win_size=(640, 480))
+          viewer = Viewer(config=cfg, window_type="offscreen")
+          viewer.append_box("robot", "body", (1.0, 2.0, 3.0))
+          assert_type(viewer.get_screenshot(), NDArray[np.uint8] | None)
+          assert_type(viewer.save_screenshot(), bool)
+          assert_type(make_axes(), Geom)
+          assert_type(make_points([[0.0, 0.0, 0.0]]), Geom)
+          '@ | Set-Content strict_consumer.py -Encoding utf8NoBOM
+
+          @'
+          {
+            "typeCheckingMode": "strict",
+            "pythonVersion": "3.14",
+            "include": ["strict_consumer.py"],
+            "reportPrivateImportUsage": "error"
+          }
+          '@ | Set-Content pyrightconfig.json -Encoding utf8NoBOM
+
+          npx --yes pyright@latest --version
+          npx --yes pyright@latest --pythonpath .\.venv\Scripts\python.exe
