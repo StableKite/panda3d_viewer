@@ -39,7 +39,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'numpy',
-        'panda3d @ git+https://github.com/StableKite/panda3d.git ; '
+        'panda3d @ git+https://github.com/StableKite/panda3d.git@codex/sbi-openssl4-20261117 ; '
         'python_version == "3.15" and (sys_platform == "linux" or sys_platform == "win32")',
         'panda3d>=1.10; python_version != "3.15" or (sys_platform != "linux" and sys_platform != "win32")',
     ],
